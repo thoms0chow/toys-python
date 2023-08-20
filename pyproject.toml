@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "toys-python"
+version = "0.1.0"
+description = ""
+authors = ["thomas.chow <thomas0chow@gmail.com>"]
+readme = "README.md"
+packages = [{include = "toys_python"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pytest = "^7.4.0"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
