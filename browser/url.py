@@ -1,12 +1,23 @@
+import os
 import socket
 import ssl
 from typing import Dict, Tuple
 
 
 class URL:
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str | None) -> None:
+        # Default page
+        if not url:
+            url = f"file://{os.path.abspath('./tests/default.html')}"
+
         self.scheme, url = url.split("://", 1)
-        assert self.scheme in ["http", "https"], f"Unknown scheme {self.scheme}"
+        assert self.scheme in ["http", "https", "file"], f"Unknown scheme {self.scheme}"
+
+        if self.scheme == "file":
+            self.path = url
+            self.port = None
+            self.host = None
+            return
 
         if "/" not in url:
             url = url + "/"
@@ -14,17 +25,30 @@ class URL:
         self.host, url = url.split("/", 1)
         self.path = "/" + url
 
-        if self.scheme == "http":
-            self.port = 80
-        elif self.scheme == "https":
-            self.port = 443
+        match self.scheme:
+            case "http":
+                self.port = 80
+            case "https":
+                self.port = 443
 
         # Custom port
         if ":" in self.host:
             self.host, port = self.host.split(":", 1)
             self.port = int(port)
 
-    def request(self) -> Tuple[Dict[str, str], str]:
+    def request(self) -> Tuple[Dict[str, str] | None, str]:
+        # File
+        if self.scheme == "file":
+            if self.path == "/":
+                self.path = os.path.abspath("./tests/default.html")
+            try:
+                with open(self.path, "r", encoding="utf-8") as f:
+                    body = f.read()
+                    return None, body
+            except FileNotFoundError:
+                return None, "File Not Found"
+
+        # HTTP & HTTPS
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
         if self.scheme == "https":
             ctx = ssl.create_default_context()
@@ -76,4 +100,7 @@ def load(url: URL) -> None:
 if __name__ == "__main__":
     import sys
 
-    load(URL(sys.argv[1]))
+    url = None
+    if len(sys.argv) > 1:
+        url = sys.argv[1]
+    load(URL(url))
