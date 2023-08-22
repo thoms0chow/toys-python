@@ -1,15 +1,15 @@
 import os
 import socket
 import ssl
-from typing import Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
+
+DEFAULT_PAGE_URL = f"file://{os.path.abspath('./tests/default.html')}"
 
 
 class URL:
-    def __init__(self, url: str | None) -> None:
-        # Default page
-        if not url:
-            url = f"file://{os.path.abspath('./tests/default.html')}"
-
+    def __init__(
+        self, url: str = DEFAULT_PAGE_URL, headers: Optional[Dict[str, str]] = None
+    ) -> None:
         self.scheme, url = url.split("://", 1)
         assert self.scheme in ["http", "https", "file"], f"Unknown scheme {self.scheme}"
 
@@ -36,6 +36,18 @@ class URL:
             self.host, port = self.host.split(":", 1)
             self.port = int(port)
 
+        self.headers = {
+            "User-Agent": "Toy Browser (In Python)",
+            "Host": self.host,
+            "Connection": "close",
+        }
+        if headers is not None:
+            self.headers.update(headers)
+
+    def set_header(self, headers: Dict[str, str]) -> None:
+        assert self.scheme != "file"
+        self.headers.update(headers)
+
     def request(self) -> Tuple[Dict[str, str] | None, str]:
         # File
         if self.scheme == "file":
@@ -56,7 +68,11 @@ class URL:
 
         s.connect((self.host, self.port))
 
-        msg = f"GET {self.path} HTTP/1.0\r\nHost: {self.host}\r\n\r\n"
+        msg = f"GET {self.path} HTTP/1.1\r\n"
+        for header, value in self.headers.items():
+            msg += f"{header}: {value}\r\n"
+        msg += "\r\n"
+        # msg = f"GET {self.path} HTTP/1.0\r\nHost: {self.host}\r\n\r\n"
         s.send(msg.encode("utf8"))
         res = s.makefile("r", encoding="utf8", newline="\r\n")
 
@@ -64,21 +80,21 @@ class URL:
         version, status, explanation = status_line.split(" ", 2)
         assert status == "200", f"{status, explanation}"
 
-        headers = {}
+        response_headers = {}
         while True:
             line = res.readline()
             if line == "\r\n":
                 break
-            header, value = line.split(":", 1)
-            headers[header.lower()] = value.strip()
+            response_header, value = line.split(":", 1)
+            response_headers[response_header.lower()] = value.strip()
 
-        assert "transfer-encoding" not in headers
-        assert "content-encoding" not in headers
+        assert "transfer-encoding" not in response_headers
+        assert "content-encoding" not in response_headers
 
         body = res.read()
         s.close()
 
-        return headers, body
+        return response_headers, body
 
 
 def show(body: str) -> None:
@@ -100,7 +116,7 @@ def load(url: URL) -> None:
 if __name__ == "__main__":
     import sys
 
-    url = None
     if len(sys.argv) > 1:
-        url = sys.argv[1]
-    load(URL(url))
+        load(URL(sys.argv[1]))
+    else:
+        load(URL())
