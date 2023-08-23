@@ -42,3 +42,21 @@ def test_custom_http_header() -> None:
     assert set(headers.items()).issubset(
         set(url.headers.items())
     ), "Custom headers is not set"
+
+
+@pytest.mark.parametrize(
+    "url, expected_output",
+    [
+        ("data:text/html,Hello World!", "Hello World!"),
+        ("data:,Hello%2C%20World%21", "Hello, World!"),
+        # TODO: MIME type & encwding handling
+        # ("data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==", "Hello World!"),
+        (
+            "data:text/html,%3Ch1%3EHello%2C%20World%21%3C%2Fh1%3E",
+            "<h1>Hello, World!</h1>",
+        ),
+    ],
+)
+def test_data_url(url: str, expected_output: str) -> None:
+    _, response_body = URL(url).request()
+    assert response_body == expected_output

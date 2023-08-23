@@ -1,56 +1,79 @@
+from enum import Enum
+import mimetypes
 import os
 import socket
 import ssl
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
+import urllib.parse
 
 DEFAULT_PAGE_URL = f"file://{os.path.abspath('./tests/default.html')}"
+
+
+class Scheme(Enum):
+    HTTP = "http"
+    HTTPS = "https"
+    FILE = "file"
+    DATA = "data"
 
 
 class URL:
     def __init__(
         self, url: str = DEFAULT_PAGE_URL, headers: Optional[Dict[str, str]] = None
     ) -> None:
-        self.scheme, url = url.split("://", 1)
-        assert self.scheme in ["http", "https", "file"], f"Unknown scheme {self.scheme}"
+        self._set_scheme(url)
+        self._parse_url(url)
 
-        if self.scheme == "file":
-            self.path = url
-            self.port = None
-            self.host = None
-            return
+        if self.scheme in [Scheme.HTTP, Scheme.HTTPS]:
+            self.headers = {
+                "User-Agent": "Toy Browser (In Python)",
+                "Host": self.host,
+                "Connection": "close",
+            }
+            if headers is not None:
+                self.headers.update(headers)
 
-        if "/" not in url:
-            url = url + "/"
+    def _set_scheme(self, url: str) -> None:
+        scheme_str, _ = url.split(":", 1)
+        self.scheme = Scheme(scheme_str)
+        assert self.scheme in Scheme, f"Unknown scheme {self.scheme}"
 
-        self.host, url = url.split("/", 1)
-        self.path = "/" + url
-
+    def _parse_url(self, url: str) -> None:
         match self.scheme:
-            case "http":
-                self.port = 80
-            case "https":
-                self.port = 443
+            case Scheme.DATA:
+                _, url = url.split(":", 1)
+                self.mime_type, self.data = url.split(",", 1)
+            case Scheme.FILE:
+                _, url = url.split("://", 1)
+                self.path = url
+            case Scheme.HTTP | Scheme.HTTPS:
+                _, url = url.split("://", 1)
 
-        # Custom port
-        if ":" in self.host:
-            self.host, port = self.host.split(":", 1)
-            self.port = int(port)
+                if "/" not in url:
+                    url = url + "/"
 
-        self.headers = {
-            "User-Agent": "Toy Browser (In Python)",
-            "Host": self.host,
-            "Connection": "close",
-        }
-        if headers is not None:
-            self.headers.update(headers)
+                self.host, url = url.split("/", 1)
+                self.path = "/" + url
+
+                if self.scheme == Scheme.HTTP:
+                    self.port = 80
+                else:
+                    self.port = 443
+
+                # Custom port
+                if ":" in self.host:
+                    self.host, port = self.host.split(":", 1)
+                    self.port = int(port)
 
     def set_header(self, headers: Dict[str, str]) -> None:
-        assert self.scheme != "file"
+        assert self.scheme in [
+            Scheme.HTTP,
+            Scheme.HTTPS,
+        ], "Header setting only allowed in HTTP/HTTPS request"
         self.headers.update(headers)
 
     def request(self) -> Tuple[Dict[str, str] | None, str]:
         # File
-        if self.scheme == "file":
+        if self.scheme == Scheme.FILE:
             if self.path == "/":
                 self.path = os.path.abspath("./tests/default.html")
             try:
@@ -60,9 +83,15 @@ class URL:
             except FileNotFoundError:
                 return None, "File Not Found"
 
+        # Data
+        if self.scheme == Scheme.DATA:
+            # TODO: MIME type & encoding handling
+            self.data = urllib.parse.unquote(self.data)
+            return None, self.data
+
         # HTTP & HTTPS
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
-        if self.scheme == "https":
+        if self.scheme == Scheme.HTTPS:
             ctx = ssl.create_default_context()
             s = ctx.wrap_socket(s, server_hostname=self.host)
 
