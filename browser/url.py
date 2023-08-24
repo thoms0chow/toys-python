@@ -1,4 +1,5 @@
 from enum import Enum
+import gzip
 import mimetypes
 import os
 import socket
@@ -53,11 +54,7 @@ class URL:
 
                 self.host, url = url.split("/", 1)
                 self.path = "/" + url
-
-                if self.scheme == Scheme.HTTP:
-                    self.port = 80
-                else:
-                    self.port = 443
+                self.port = 80 if self.scheme == Scheme.HTTP else 443
 
                 # Custom port
                 if ":" in self.host:
@@ -101,28 +98,55 @@ class URL:
         for header, value in self.headers.items():
             msg += f"{header}: {value}\r\n"
         msg += "\r\n"
-        # msg = f"GET {self.path} HTTP/1.0\r\nHost: {self.host}\r\n\r\n"
         s.send(msg.encode("utf8"))
-        res = s.makefile("r", encoding="utf8", newline="\r\n")
+        res = s.makefile("rb", newline="\r\n")
 
-        status_line = res.readline()
+        status_line = res.readline().decode("utf-8")
         version, status, explanation = status_line.split(" ", 2)
         assert status == "200", f"{status, explanation}"
 
         response_headers = {}
         while True:
             line = res.readline()
-            if line == "\r\n":
+            if line == b"\r\n":
                 break
-            response_header, value = line.split(":", 1)
+
+            response_header, value = line.decode("utf-8").split(":", 1)
             response_headers[response_header.lower()] = value.strip()
 
-        assert "transfer-encoding" not in response_headers
-        assert "content-encoding" not in response_headers
+        if (
+            "transfer-encoding" in response_headers
+            and response_headers["transfer-encoding"] == "chunked"
+        ):
+            body_data = res.read()
+            binary_body = b""
+            pos = 0
+            while pos <= len(body_data):
+                chunk_size_len = body_data.find(b"\r\n", pos) - pos
+                chunk_size = int(
+                    body_data[pos : pos + chunk_size_len].decode("utf-8"), 16
+                )
+                if chunk_size == 0:
+                    break
+                pos += chunk_size_len + len("\r\n")
+                chunk = body_data[pos : pos + chunk_size]
 
-        body = res.read()
+                binary_body += chunk
+                pos += chunk_size + len("\r\n")
+
+            if (
+                "content-encoding" in response_headers
+                and response_headers["content-encoding"] == "gzip"
+            ):
+                binary_body = gzip.decompress(binary_body)
+            # TODO: Other encoding type
+            else:
+                pass
+        else:
+            binary_body = res.read()
+
+        body = binary_body.decode("utf-8")
         s.close()
-
         return response_headers, body
 
 
@@ -145,6 +169,7 @@ def load(url: URL) -> None:
 if __name__ == "__main__":
     import sys
 
+    # TODO: Retreive header from cli arguments
     if len(sys.argv) > 1:
         load(URL(sys.argv[1]))
     else:

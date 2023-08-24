@@ -60,3 +60,8 @@ def test_custom_http_header() -> None:
 def test_data_url(url: str, expected_output: str) -> None:
     _, response_body = URL(url).request()
     assert response_body == expected_output
+
+
+def test_compression() -> None:
+    url = URL("https://www.google.com", {"Accept-Encoding": "gzip"})
+    url.request()
