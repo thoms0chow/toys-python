@@ -105,7 +105,7 @@ class URL:
         version, status, explanation = status_line.split(" ", 2)
         assert status == "200", f"{status, explanation}"
 
-        response_headers = {}
+        response_headers: Dict[str, str] = {}
         while True:
             line = res.readline()
             if line == b"\r\n":
@@ -113,6 +113,13 @@ class URL:
 
             response_header, value = line.decode("utf-8").split(":", 1)
             response_headers[response_header.lower()] = value.strip()
+
+        if "content-type" in response_headers:
+            media_type, charset = response_headers["content-type"].split("; ", 1)
+            _, charset_value = charset.split("=", 1)
+            encoding = charset_value.strip().lower()
+        else:
+            encoding = "utf-8"
 
         if (
             "transfer-encoding" in response_headers
@@ -124,7 +131,7 @@ class URL:
             while pos <= len(body_data):
                 chunk_size_len = body_data.find(b"\r\n", pos) - pos
                 chunk_size = int(
-                    body_data[pos : pos + chunk_size_len].decode("utf-8"), 16
+                    body_data[pos : pos + chunk_size_len].decode(encoding), 16
                 )
                 if chunk_size == 0:
                     break
@@ -145,7 +152,7 @@ class URL:
         else:
             binary_body = res.read()
 
-        body = binary_body.decode("utf-8")
+        body = binary_body.decode(encoding)
         s.close()
         return response_headers, body
 
