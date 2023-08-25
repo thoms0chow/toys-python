@@ -1,6 +1,12 @@
+"""
+Toy Python Browser
+    Command: 
+        $ python browser/url.py https://www.google.com --headers Accept-Encoding=gzip
+"""
+
+import argparse
 from enum import Enum
 import gzip
-import mimetypes
 import os
 import socket
 import ssl
@@ -19,8 +25,11 @@ class Scheme(Enum):
 
 class URL:
     def __init__(
-        self, url: str = DEFAULT_PAGE_URL, headers: Optional[Dict[str, str]] = None
+        self, url: Optional[str] = None, headers: Optional[Dict[str, str]] = None
     ) -> None:
+        if url is None:
+            url = DEFAULT_PAGE_URL
+
         self._set_scheme(url)
         self._parse_url(url)
 
@@ -174,10 +183,18 @@ def load(url: URL) -> None:
 
 
 if __name__ == "__main__":
-    import sys
+    parser = argparse.ArgumentParser(description="Toy Python Browser CLI")
+    parser.add_argument("url", nargs="?", default=None)
+    parser.add_argument("--headers", nargs="*", type=str)
+    args = parser.parse_args()
 
-    # TODO: Retreive header from cli arguments
-    if len(sys.argv) > 1:
-        load(URL(sys.argv[1]))
+    headers: Dict[str, str] = {}
+    if args.headers:
+        for header in args.headers:
+            key, value = header.split("=")
+            headers[key] = value
+
+    if args.url:
+        load(URL(args.url, headers))
     else:
-        load(URL())
+        load(URL(headers=headers))
