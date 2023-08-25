@@ -10,7 +10,7 @@ import gzip
 import os
 import socket
 import ssl
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import urllib.parse
 
 DEFAULT_PAGE_URL = f"file://{os.path.abspath('./tests/default.html')}"
@@ -123,8 +123,11 @@ class URL:
             response_header, value = line.decode("utf-8").split(":", 1)
             response_headers[response_header.lower()] = value.strip()
 
-        if "content-type" in response_headers:
-            media_type, charset = response_headers["content-type"].split("; ", 1)
+        if (
+            "content-type" in response_headers
+            and "charset" in response_headers["content-type"]
+        ):
+            _, charset = response_headers["content-type"].split("; ", 1)
             _, charset_value = charset.split("=", 1)
             encoding = charset_value.strip().lower()
         else:
@@ -166,19 +169,38 @@ class URL:
         return response_headers, body
 
 
+# TODO: fix
+"""
+<body class="main">
+...
+</body>
+"""
+
+
 def show(body: str) -> None:
     in_angle = False
+    tags: List[str] = []
+    tag_name = ""
     for c in body:
-        if c == "<":
-            in_angle = True
-        elif c == ">":
-            in_angle = False
-        elif not in_angle:
-            print(c, end="")
+        match c:
+            case "<":
+                in_angle = True
+                tag_name = ""  # reset tag_name when encoutering "<"
+            case ">":
+                in_angle = False
+                if len(tags) > 1 and tag_name == f"/{tags[-1]}":
+                    tags.pop()
+                else:
+                    tags.append(tag_name)
+            case _:
+                if in_angle:
+                    tag_name += c
+                elif "body" in tags:
+                    print(c, end="")
 
 
 def load(url: URL) -> None:
-    headers, body = url.request()
+    _, body = url.request()
     show(body)
 
 
