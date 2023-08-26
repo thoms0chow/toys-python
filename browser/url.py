@@ -169,14 +169,6 @@ class URL:
         return response_headers, body
 
 
-# TODO: fix
-"""
-<body class="main">
-...
-</body>
-"""
-
-
 def show(body: str) -> None:
     in_angle = False
     tags: List[str] = []
@@ -191,7 +183,7 @@ def show(body: str) -> None:
                 if len(tags) > 1 and tag_name == f"/{tags[-1]}":
                     tags.pop()
                 else:
-                    tags.append(tag_name)
+                    tags.append(tag_name.split(" ")[0])
             case _:
                 if in_angle:
                     tag_name += c
