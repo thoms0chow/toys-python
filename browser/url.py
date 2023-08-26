@@ -7,6 +7,7 @@ Toy Python Browser
 import argparse
 from enum import Enum
 import gzip
+import html
 import os
 import socket
 import ssl
@@ -173,22 +174,47 @@ def show(body: str) -> None:
     in_angle = False
     tags: List[str] = []
     tag_name = ""
+
+    in_entity = False
+    entity = ""
+
     for c in body:
+        # Tags
         match c:
             case "<":
                 in_angle = True
                 tag_name = ""  # reset tag_name when encoutering "<"
+                continue
             case ">":
                 in_angle = False
                 if len(tags) > 1 and tag_name == f"/{tags[-1]}":
                     tags.pop()
                 else:
                     tags.append(tag_name.split(" ")[0])
+                continue
             case _:
                 if in_angle:
                     tag_name += c
-                elif "body" in tags:
-                    print(c, end="")
+                    continue
+
+        # Skip characters not inside <body> </body>
+        if "body" not in tags:
+            continue
+
+        # Entities
+        match c:
+            case "&":
+                in_entity = True
+                entity = "&"
+                continue
+            case ";" | _ if in_entity:
+                entity += c
+                if c == ";":
+                    print(html.unescape(entity), end="")
+                    in_entity = False
+                continue
+
+        print(c, end="")
 
 
 def load(url: URL) -> None:
