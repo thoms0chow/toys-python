@@ -1,9 +1,10 @@
 import os
 from typing import Callable
 
+from _pytest.capture import capsys
 import pytest
 
-from browser.url import URL, load
+from browser.url import URL, load, show, transform
 
 EXAMPLE_ORG_URL = "https://example.org"
 
@@ -49,7 +50,7 @@ def test_custom_http_header() -> None:
     [
         ("data:text/html,Hello World!", "Hello World!"),
         ("data:,Hello%2C%20World%21", "Hello, World!"),
-        # TODO: MIME type & encwding handling
+        # TODO: MIME type & encoding handling
         # ("data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==", "Hello World!"),
         (
             "data:text/html,%3Ch1%3EHello%2C%20World%21%3C%2Fh1%3E",
@@ -65,3 +66,14 @@ def test_data_url(url: str, expected_output: str) -> None:
 def test_compression() -> None:
     url = URL("https://www.google.com", {"Accept-Encoding": "gzip"})
     url.request()
+
+
+def test_view_source(capsys) -> None:
+    # Testcase came from https://github.com/browserengineering/book/discussions/559
+    expected_output = "<!doctype><html><head>.*</head><body><p>&lt;html /&gt; is nifty</p></body></html>"
+    show(transform(expected_output))
+
+    captured = capsys.readouterr()
+    assert expected_output == captured.out.rstrip(
+        "\n"
+    ), f"View-source mode not respected"

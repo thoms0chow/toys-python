@@ -31,6 +31,10 @@ class URL:
         if url is None:
             url = DEFAULT_PAGE_URL
 
+        # View-source
+        self.view_source = True if url.startswith("view-source:") else False
+        url = url.strip("view-source:")
+
         self._set_scheme(url)
         self._parse_url(url)
 
@@ -171,6 +175,11 @@ class URL:
 
 
 def show(body: str) -> None:
+    # View source mode
+    if body.startswith("&lt;"):
+        print(html.unescape(body))
+        return
+
     in_angle = False
     tags: List[str] = []
     tag_name = ""
@@ -217,9 +226,23 @@ def show(body: str) -> None:
         print(c, end="")
 
 
+def transform(body: str):
+    """
+    Transform to escaped HTML entity string
+    """
+    res = ""
+    for c in body:
+        c = html.escape(c)
+        res += c
+    return res
+
+
 def load(url: URL) -> None:
     _, body = url.request()
-    show(body)
+    if url.view_source:
+        show(transform(body))
+    else:
+        show(body)
 
 
 if __name__ == "__main__":
