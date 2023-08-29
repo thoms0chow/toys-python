@@ -5,10 +5,10 @@ description = ""
 authors = ["thomas.chow <thomas0chow@gmail.com>"]
 readme = "README.md"
 packages = [{include = "toys_python"}]
-
 [tool.poetry.dependencies]
 python = "^3.11"
 pytest = "^7.4.0"
+pytest-localserver = "^0.8.0"
 
 
 [tool.poetry.group.dev.dependencies]

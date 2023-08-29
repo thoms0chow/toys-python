@@ -1,10 +1,10 @@
 import os
-from typing import Callable
+from typing import Any, Callable, Dict, List
 
-from _pytest.capture import capsys
 import pytest
+from pytest_localserver.http import ContentServer, Request, WSGIServer
 
-from browser.url import URL, load, show, transform
+from browser.url import URL, show, transform
 
 EXAMPLE_ORG_URL = "https://example.org"
 
@@ -77,3 +77,35 @@ def test_view_source(capsys) -> None:
     assert expected_output == captured.out.rstrip(
         "\n"
     ), f"View-source mode not respected"
+
+
+def test_redirect() -> None:
+    _, after_redirect_body = URL("http://browser.engineering/redirect").request()
+    _, body = URL("http://browser.engineering/http.html").request()
+
+    assert after_redirect_body == body
+
+
+def redirect_loop_app(environ: Dict[str, Any], start_response: Callable) -> List[bytes]:
+    if environ["PATH_INFO"] == "/redirect":
+        status = "301 Found"
+        headers = [("location", "/redirect")]
+        start_response(status, headers)
+        return [b"Redirecting...."]
+    return [b""]
+
+
+@pytest.fixture()
+def redirect_loop_server(request: pytest.FixtureRequest):
+    server = WSGIServer(application=redirect_loop_app)
+    server.start()
+    request.addfinalizer(server.stop)
+    return server
+
+
+def test_redirect_loop(redirect_loop_server: WSGIServer):
+    host, port = redirect_loop_server.server_address
+    mock_redirect_loop_url = f"http://{host}:{port}/redirect"
+
+    _, response_body = URL(mock_redirect_loop_url).request()
+    assert response_body == "ERR_TOO_MANY_REDIRECTS", "Can not handle redirect loop"

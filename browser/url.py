@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Tuple
 import urllib.parse
 
 DEFAULT_PAGE_URL = f"file://{os.path.abspath('./tests/default.html')}"
+MAX_REDIRECTION_TIMES = 20
 
 
 class Scheme(Enum):
@@ -26,10 +27,14 @@ class Scheme(Enum):
 
 class URL:
     def __init__(
-        self, url: Optional[str] = None, headers: Optional[Dict[str, str]] = None
+        self,
+        url: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
+        redirection_times: int = 0,
     ) -> None:
         if url is None:
             url = DEFAULT_PAGE_URL
+        self.redirection_times = redirection_times
 
         # View-source
         self.view_source = True if url.startswith("view-source:") else False
@@ -83,6 +88,10 @@ class URL:
         self.headers.update(headers)
 
     def request(self) -> Tuple[Dict[str, str] | None, str]:
+        # Avoid infinite redirection loop
+        if self.redirection_times > 20:
+            return None, "ERR_TOO_MANY_REDIRECTS"
+
         # File
         if self.scheme == Scheme.FILE:
             if self.path == "/":
@@ -117,7 +126,10 @@ class URL:
 
         status_line = res.readline().decode("utf-8")
         version, status, explanation = status_line.split(" ", 2)
-        assert status == "200", f"{status, explanation}"
+
+        need_redirect = True if 300 <= int(status) <= 399 else False
+
+        assert status == "200" or need_redirect, f"{status, explanation}"
 
         response_headers: Dict[str, str] = {}
         while True:
@@ -127,6 +139,20 @@ class URL:
 
             response_header, value = line.decode("utf-8").split(":", 1)
             response_headers[response_header.lower()] = value.strip()
+
+        # Redirect
+        if need_redirect:
+            # Sometimes "Location" header skips the host and scheme and just starts with a "/"
+            # Keep port and headers in redirection
+            redirect_location = (
+                f"{self.scheme.value}://{self.host}:{self.port}{response_headers['location']}"
+                if response_headers["location"].startswith("/")
+                else response_headers["location"]
+            )
+            redirect_url = URL(
+                redirect_location, self.headers, self.redirection_times + 1
+            )
+            return redirect_url.request()
 
         if (
             "content-type" in response_headers
